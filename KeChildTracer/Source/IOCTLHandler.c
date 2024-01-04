@@ -2,7 +2,7 @@
 #include <Vector.h>
 
 extern PIO_WORKITEM ChildNotifierWI;
-extern ULONG_PTR    ChildPidToNotify;
+extern ULONG_PTR    ChildPidToNotify; // To be removed
 extern KEVENT       PrepChildInjEvt;
 extern t_vector     PPidWatchlist;
 
@@ -16,6 +16,15 @@ NTSTATUS DriverCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     return STATUS_SUCCESS;
 }
 
+/*
+Implement some kind of queue:
+    - the queue will be able to hold multiple pids
+    - the data will be sent in a different way so we can tell the caller that the queue is not empty for ex:
+        10bytes buffer just in case:
+            bytes 0-7: pid - bytes 7-9: bit 0: queue status flag
+    - Also a more efficient possibility would be to sent everything at once (if there are more than 1 pid in the queue)
+        Prob for this we'd have to implement 2 ioctl calls? One to retrieve the buffer size and the other one to actually get the data?
+*/
 VOID ChildInjDelayedWorker(PDEVICE_OBJECT DeviceObject, PVOID Context) {
     ULONG_PTR   *UserBuf;
     PIRP        Irp = (PIRP)Context;

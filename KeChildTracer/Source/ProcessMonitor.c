@@ -2,7 +2,7 @@
 
 extern PDEVICE_OBJECT   gDeviceObject;
 extern KEVENT           PrepChildInjEvt;
-
+ULONG_PTR    ChildPidToNotify;
 t_vector                PPidWatchlist       = { 0 }; // Free me probably @ drive unload?
 
 extern pPsLookupProcessByProcessId  LookupProcessById;
@@ -20,6 +20,7 @@ static BOOLEAN IsPidPresent(void* Val, void* UserData) {
 
 void CreateProcessNotifyRoutineExCB(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo) {
     UNREFERENCED_PARAMETER(Process);
+    UNREFERENCED_PARAMETER(ProcessId);
     if (CreateInfo) {
         HANDLE ParentProcessId = CreateInfo->ParentProcessId;
         t_ppid_on_watch OnWatch = { (ULONG_PTR)ParentProcessId, FALSE };
