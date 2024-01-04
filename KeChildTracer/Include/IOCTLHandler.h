@@ -1,0 +1,10 @@
+#pragma once
+#include <ntddk.h>
+#include <DebugHelp.h>
+
+#define IOCTL_MON_CHILD			CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_SUB_CHILD_INJ		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+
+NTSTATUS IoControlDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+NTSTATUS DriverCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp);
