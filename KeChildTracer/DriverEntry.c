@@ -79,12 +79,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
         DebugPrint("PsSetCreateProcessNotifyRoutineEx(): Error installing Callback: [%d]\n", Status);
         return Status;
     }
-    
-    Status = PsSetLoadImageNotifyRoutine(LoadImageNotifyRoutineCB);
-    if (!NT_SUCCESS(Status)) {
-        DebugPrint("PsSetLoadImageNotifyRoutine(): Error installing Callback: [%d]\n", Status);
-        return Status;
-    }
 
     ChildNotifierWI = IoAllocateWorkItem(gDeviceObject);
     if (!ChildNotifierWI) {

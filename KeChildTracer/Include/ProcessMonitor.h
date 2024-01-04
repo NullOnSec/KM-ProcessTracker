@@ -12,4 +12,3 @@ typedef NTSTATUS(*pPsSuspendProcess)(PEPROCESS Process);
 typedef NTSTATUS(*pPsLookupProcessByProcessId)( HANDLE    ProcessId, PEPROCESS* Process);
 
 void CreateProcessNotifyRoutineExCB(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo);
-void LoadImageNotifyRoutineCB(PUNICODE_STRING FullImageName, HANDLE ProcessId, PIMAGE_INFO ImageInfo);
