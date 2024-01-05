@@ -75,13 +75,12 @@ NTSTATUS ResumeProcessByPid(ULONG_PTR Pid) {
         DebugPrint("PsLookupProcessByProcessId(): Unable to obtain EPROCESS from PID %ld\n", Pid);
         return Status;
     }
-
     Status = ProcUtilsApis.KResumeProccess(Process);
     if (!NT_SUCCESS(Status)) {
         DebugPrint("PsResumeProcess(): Unable to obtain resume PID %ld\n", Pid);
         return Status;
     }
-
+    
     DebugPrint("PsResumeProcess(): Process PID: %ld resumed succesfully\n", Pid);
     return Status;
 }

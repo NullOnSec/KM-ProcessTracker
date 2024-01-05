@@ -8,6 +8,8 @@ extern KEVENT       PrepChildInjEvt;
 extern t_vector     PPidWatchlist;
 extern KAPIS        ProcUtilsApis;
 
+BOOLEAN ProcCreationCB = FALSE;
+
 NTSTATUS DriverCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -112,10 +114,12 @@ NTSTATUS IoControlDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     case IOCTL_MON_START:
         Break();
         Status = RegisterCallbacks(FALSE);
+        if (NT_SUCCESS(Status)) ProcCreationCB = TRUE;
         break;
 
     case IOCTL_MON_STOP:// In this case its probably ideal to do some cleanup once the actual pipeline is more advanced
         Status = RegisterCallbacks(TRUE);
+        if (NT_SUCCESS(Status)) ProcCreationCB = FALSE;
         break;
 
     case IOCTL_RESUME_PROC:

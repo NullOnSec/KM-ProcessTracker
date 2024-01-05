@@ -1,11 +1,35 @@
 #include <Windows.h>
 #include <iostream>
-
+#include <TlHelp32.h>
 #define IOCTL_MON_CHILD			CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_SUB_CHILD_INJ		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_MON_START			CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_MON_STOP			CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_RESUME_PROC		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+typedef LONG(NTAPI* NtResumeProcess)(IN HANDLE ProcessHandle);
+
+void ResumeProcessByPid(DWORD processId) {
+    HANDLE hThreadSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+
+    THREADENTRY32 threadEntry;
+    threadEntry.dwSize = sizeof(THREADENTRY32);
+
+    Thread32First(hThreadSnapshot, &threadEntry);
+
+    do
+    {
+        if (threadEntry.th32OwnerProcessID == processId)
+        {
+            HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE,
+                threadEntry.th32ThreadID);
+            std::cout << "Threadid: " << hThread << " Res: " << ResumeThread(hThread) << std::endl;
+            CloseHandle(hThread);
+        }
+    } while (Thread32Next(hThreadSnapshot, &threadEntry));
+
+    CloseHandle(hThreadSnapshot);
+}
 
 static DWORD Job(LPVOID Context) {
     std::cout << "Hello from thread!" << std::endl;
@@ -18,11 +42,13 @@ static DWORD Job(LPVOID Context) {
     }
     std::cout << "Recieved value: " << Value << std::endl;
    
-    if (!DeviceIoControl((HANDLE)Context, IOCTL_RESUME_PROC, &Value, sizeof(ULONG_PTR), NULL, 0, &Size, NULL)) {
-        std::cerr << "IOCTL failed. Error: " << GetLastError() << std::endl;
-        CloseHandle(Context);
-        return 1;
-    }
+    ResumeProcessByPid(Value);
+
+    //if (!DeviceIoControl((HANDLE)Context, IOCTL_RESUME_PROC, &Value, sizeof(ULONG_PTR), NULL, 0, &Size, NULL)) {
+    //    std::cerr << "IOCTL failed. Error: " << GetLastError() << std::endl;
+    //    CloseHandle(Context);
+    //    return 1;
+    //}
     return 0;
 }
 
