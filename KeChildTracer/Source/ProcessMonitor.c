@@ -6,11 +6,23 @@ extern KAPIS            ProcUtilsApis;
 ULONG_PTR               ChildPidToNotify;
 t_vector                PPidWatchlist       = { 0 }; // Free me probably @ drive unload?
 
-static BOOLEAN IsPidPresent(void* Val, void* UserData) {
-    int *value = (int*)Val;
+static BOOLEAN IsPidPresent(void** Val, void* UserData) {
+    int *value = (int*)*Val;
     t_ppid_on_watch* OnWatch = (t_ppid_on_watch*)UserData;
     if (OnWatch->ppid == *value) {
         OnWatch->IsWatched = TRUE;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOLEAN RemoveTargetFromWatchlistCb(void** Val, void* UserData) {
+    int* value = (int*)*Val;
+    int Current = HandleToULong(UserData);
+
+    if (Current == *value) {
+        Break();
+        *value = 0;
         return TRUE;
     }
     return FALSE;
@@ -32,9 +44,13 @@ void CreateProcessNotifyRoutineExCB(PEPROCESS Process, HANDLE ProcessId, PPS_CRE
                 Break();
                 ChildPidToNotify = HandleToULong(ProcessId);
                 KeSetEvent(&PrepChildInjEvt, 0, FALSE);
+                int* Value = ExAllocatePoolWithTag(NonPagedPool, sizeof(int), 'Val');
+                if (!Value) return;
+                *Value = HandleToULong(ProcessId);
+                VectorAdd(&PPidWatchlist, Value);
             }
         }
-    }
+    } else VectorSafeIter(&PPidWatchlist, RemoveTargetFromWatchlistCb, ProcessId);
 }
 
 NTSTATUS RegisterCallbacks(BOOLEAN RemoveCB) {

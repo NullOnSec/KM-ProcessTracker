@@ -33,7 +33,11 @@ VOID ChildInjDelayedWorker(PDEVICE_OBJECT DeviceObject, PVOID Context) {
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    KeWaitForSingleObject(&PrepChildInjEvt, Executive, KernelMode, FALSE, NULL);
+    while (TRUE) {
+        KeWaitForSingleObject(&PrepChildInjEvt, Executive, KernelMode, FALSE, NULL);
+        if (ChildPidToNotify) break;
+    }
+    
     if (!Irp->AssociatedIrp.SystemBuffer) {
         Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
         Irp->IoStatus.Information = 0;

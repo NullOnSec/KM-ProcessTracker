@@ -50,8 +50,8 @@ NTSTATUS VectorGetValueSafe(t_vector* Vector, int Index, void** Value) {
 
 NTSTATUS VectorSafeIter(t_vector* Vector, VectorIterCb Callback, void* UserData) {
     if (!Vector->Data) return STATUS_INVALID_ADDRESS;
-    for (size_t i = 0; i < Vector->Size; i++) {
-        if (Callback(Vector->Data[i], UserData)) return STATUS_SUCCESS;
+    for (size_t i = 0; i < Vector->Size; i++) {// Modify callback -> 3 params, ptr vector, ptr current val, userdata - This way if needed the size of the vector can be decreased
+        if (Callback(&Vector->Data[i], UserData)) return STATUS_SUCCESS;
     }
     return STATUS_SUCCESS;
 }

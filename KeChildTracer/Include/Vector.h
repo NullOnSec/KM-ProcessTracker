@@ -8,7 +8,7 @@ typedef struct s_vector {
     size_t MaxSize;
 } t_vector;
 
-typedef BOOLEAN(*VectorIterCb)(void*, void*);
+typedef BOOLEAN(*VectorIterCb)(void**, void*);
 
 NTSTATUS VectorNew(t_vector* Vector, size_t Size);
 NTSTATUS VectorDelete(t_vector* Vector);
