@@ -9,6 +9,13 @@ typedef struct s_ppid_on_watch {
 }t_ppid_on_watch;
 
 typedef NTSTATUS(*pPsSuspendProcess)(PEPROCESS Process);
-typedef NTSTATUS(*pPsLookupProcessByProcessId)( HANDLE    ProcessId, PEPROCESS* Process);
+typedef NTSTATUS(*pPsResumeProcess)(PEPROCESS Process);
+typedef NTSTATUS(*pPsLookupProcessByProcessId)(HANDLE ProcessId, PEPROCESS* Process);
+
+typedef struct s_kernel_apis {
+    pPsSuspendProcess           KSuspendProccess;
+    pPsResumeProcess            KResumeProccess;
+    pPsLookupProcessByProcessId KLookupProcessById;
+}KAPIS;
 
 void CreateProcessNotifyRoutineExCB(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo);

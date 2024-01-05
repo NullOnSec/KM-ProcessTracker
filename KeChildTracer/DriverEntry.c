@@ -4,14 +4,6 @@
 #include <DebugHelp.h>
 #include <ProcessMonitor.h>
 
-PDEVICE_OBJECT                  gDeviceObject;
-KEVENT                          PrepChildInjEvt;
-PIO_WORKITEM                    ChildNotifierWI;
-UNICODE_STRING                  DeviceName  = RTL_CONSTANT_STRING(L"\\Device\\KeChildTracer");
-UNICODE_STRING                  SymLinkName = RTL_CONSTANT_STRING(L"\\??\\KeChildTracer");
-pPsSuspendProcess               SuspendProccess = NULL;
-pPsLookupProcessByProcessId     LookupProcessById = NULL;
-
 /*
     IOCTL Codes:
         - Add parent process to watchlist       - Implemented
@@ -35,6 +27,17 @@ pPsLookupProcessByProcessId     LookupProcessById = NULL;
         - Check edge cases that could cause the system to crash
 */
 
+PDEVICE_OBJECT                  gDeviceObject;
+KEVENT                          PrepChildInjEvt;
+PIO_WORKITEM                    ChildNotifierWI;
+UNICODE_STRING                  DeviceName = RTL_CONSTANT_STRING(L"\\Device\\KeChildTracer");
+UNICODE_STRING                  SymLinkName = RTL_CONSTANT_STRING(L"\\??\\KeChildTracer");
+KAPIS                           ProcUtilsApis;
+
+static NTSTATUS RegisterDeviceObject(PDRIVER_OBJECT DriverObject);
+static NTSTATUS RegisterCallbacks(void);
+static NTSTATUS ResolveApis(void);
+
 VOID UnloadDriver(PDRIVER_OBJECT DriverObject) {
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -57,10 +60,34 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     UNREFERENCED_PARAMETER(RegistryPath);
     Break();
 
-    DriverObject->DriverUnload = UnloadDriver;
+    DriverObject->DriverUnload                          = UnloadDriver;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL]  = IoControlDispatch;
     DriverObject->MajorFunction[IRP_MJ_CREATE]          = DriverCreateClose; // Function to handle create requests
     DriverObject->MajorFunction[IRP_MJ_CLOSE]           = DriverCreateClose; // Function to handle close requests
+
+    Status = RegisterDeviceObject(DriverObject);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = RegisterCallbacks();
+    if (!NT_SUCCESS(Status)) return Status;
+
+    ChildNotifierWI = IoAllocateWorkItem(gDeviceObject);
+    if (!ChildNotifierWI) {
+        DebugPrint("IoAllocateWorkItem(): Failed\n");
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    KeInitializeEvent(&PrepChildInjEvt, NotificationEvent, FALSE);
+
+    Status = ResolveApis();
+
+    if (NT_SUCCESS(Status)) DebugPrint("Driver loaded: [%d]\n", Status);
+
+    return Status;
+}
+
+static NTSTATUS RegisterDeviceObject(PDRIVER_OBJECT DriverObject) {
+    NTSTATUS Status = STATUS_SUCCESS;
 
     Status = IoCreateDevice(DriverObject, 0, &DeviceName, FILE_DEVICE_UNKNOWN, 0, FALSE, &gDeviceObject);
     if (!NT_SUCCESS(Status)) {
@@ -74,30 +101,35 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
         return Status;
     }
 
+    return Status;
+}
+
+static NTSTATUS RegisterCallbacks(void) {
+    NTSTATUS Status = STATUS_SUCCESS;
+
     Status = PsSetCreateProcessNotifyRoutineEx(CreateProcessNotifyRoutineExCB, FALSE);
     if (!NT_SUCCESS(Status)) {
         DebugPrint("PsSetCreateProcessNotifyRoutineEx(): Error installing Callback: [%d]\n", Status);
         return Status;
     }
 
-    ChildNotifierWI = IoAllocateWorkItem(gDeviceObject);
-    if (!ChildNotifierWI) {
-        DebugPrint("IoAllocateWorkItem(): Failed\n");
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    KeInitializeEvent(&PrepChildInjEvt, NotificationEvent, FALSE);
-
-    UNICODE_STRING RoutineName;
-    RtlInitUnicodeString(&RoutineName, L"PsSuspendProcess");
-    SuspendProccess =   (pPsSuspendProcess)MmGetSystemRoutineAddress(&RoutineName);
-    
-    RtlInitUnicodeString(&RoutineName, L"PsLookupProcessByProcessId");
-    LookupProcessById = (pPsLookupProcessByProcessId)MmGetSystemRoutineAddress(&RoutineName);
-
-    if (!SuspendProccess || !LookupProcessById) return STATUS_FATAL_APP_EXIT;
-    
-    if (NT_SUCCESS(Status)) DebugPrint("Driver loaded: [%d]\n", Status);
-
     return Status;
+}
+
+static NTSTATUS ResolveApis(void) {
+    UNICODE_STRING RoutineName;
+    
+    RtlInitUnicodeString(&RoutineName, L"PsSuspendProcess");
+    ProcUtilsApis.KSuspendProccess = (pPsSuspendProcess)MmGetSystemRoutineAddress(&RoutineName);
+    if (!ProcUtilsApis.KSuspendProccess) return STATUS_FATAL_APP_EXIT;
+
+    RtlInitUnicodeString(&RoutineName, L"PsResumeProcess");
+    ProcUtilsApis.KResumeProccess = (pPsResumeProcess)MmGetSystemRoutineAddress(&RoutineName);
+    if (!ProcUtilsApis.KResumeProccess) return STATUS_FATAL_APP_EXIT;
+
+    RtlInitUnicodeString(&RoutineName, L"PsLookupProcessByProcessId");
+    ProcUtilsApis.KLookupProcessById = (pPsLookupProcessByProcessId)MmGetSystemRoutineAddress(&RoutineName);
+    if (!ProcUtilsApis.KLookupProcessById) return STATUS_FATAL_APP_EXIT;
+
+    return STATUS_SUCCESS;
 }

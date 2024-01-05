@@ -88,6 +88,9 @@ NTSTATUS IoControlDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         IoQueueWorkItem(ChildNotifierWI, ChildInjDelayedWorker, DelayedWorkQueue, Irp);
         return STATUS_PENDING;
 
+    case IOCTL_MON_START:
+        Status = STATUS_SUCCESS;
+        break;
     default:
         Status = STATUS_INVALID_DEVICE_REQUEST;
         break;
