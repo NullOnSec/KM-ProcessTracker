@@ -29,13 +29,12 @@
 
 PDEVICE_OBJECT                  gDeviceObject;
 KEVENT                          PrepChildInjEvt;
-PIO_WORKITEM                    ChildNotifierWI;
+PIO_WORKITEM                    ChildNotifierWI, ProcessResumeWI;
 UNICODE_STRING                  DeviceName = RTL_CONSTANT_STRING(L"\\Device\\KeChildTracer");
 UNICODE_STRING                  SymLinkName = RTL_CONSTANT_STRING(L"\\??\\KeChildTracer");
 KAPIS                           ProcUtilsApis;
 
 static NTSTATUS RegisterDeviceObject(PDRIVER_OBJECT DriverObject);
-static NTSTATUS RegisterCallbacks(void);
 static NTSTATUS ResolveApis(void);
 
 VOID UnloadDriver(PDRIVER_OBJECT DriverObject) {
@@ -44,14 +43,16 @@ VOID UnloadDriver(PDRIVER_OBJECT DriverObject) {
     UNREFERENCED_PARAMETER(DriverObject);
     Break();
 
-    Status = PsSetCreateProcessNotifyRoutineEx(CreateProcessNotifyRoutineExCB, TRUE);
-    if (!NT_SUCCESS(Status)) DebugPrint("PsSetCreateProcessNotifyRoutineEx(): Error removing Callback: [%d]\n", Status);
+    RegisterCallbacks(FALSE);
 
     Status = IoDeleteSymbolicLink(&SymLinkName);
     if (!NT_SUCCESS(Status)) DebugPrint("IoDeleteSymbolicLink(): Error removing DeviceSymLink: [%d]\n", Status);
 
     IoDeleteDevice(gDeviceObject);
-    if (Status == STATUS_SUCCESS) DebugPrint("Driver unloaded\n");
+
+    if (!NT_SUCCESS(Status))    DebugPrint("Errors unloading driver!\n");
+    else                        DebugPrint("Driver unloaded succesfully\n");
+
 }
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
@@ -68,11 +69,14 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     Status = RegisterDeviceObject(DriverObject);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = RegisterCallbacks();
-    if (!NT_SUCCESS(Status)) return Status;
-
     ChildNotifierWI = IoAllocateWorkItem(gDeviceObject);
     if (!ChildNotifierWI) {
+        DebugPrint("IoAllocateWorkItem(): Failed\n");
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    ProcessResumeWI = IoAllocateWorkItem(gDeviceObject);
+    if (!ProcessResumeWI) {
         DebugPrint("IoAllocateWorkItem(): Failed\n");
         return STATUS_INSUFFICIENT_RESOURCES;
     }
@@ -98,18 +102,6 @@ static NTSTATUS RegisterDeviceObject(PDRIVER_OBJECT DriverObject) {
     Status = IoCreateSymbolicLink(&SymLinkName, &DeviceName);
     if (!NT_SUCCESS(Status)) {
         DebugPrint("Failed to create symlink object\n");
-        return Status;
-    }
-
-    return Status;
-}
-
-static NTSTATUS RegisterCallbacks(void) {
-    NTSTATUS Status = STATUS_SUCCESS;
-
-    Status = PsSetCreateProcessNotifyRoutineEx(CreateProcessNotifyRoutineExCB, FALSE);
-    if (!NT_SUCCESS(Status)) {
-        DebugPrint("PsSetCreateProcessNotifyRoutineEx(): Error installing Callback: [%d]\n", Status);
         return Status;
     }
 

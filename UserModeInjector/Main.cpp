@@ -1,8 +1,11 @@
 #include <Windows.h>
 #include <iostream>
 
-#define IOCTL_MON_CHILD CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_MON_CHILD			CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_SUB_CHILD_INJ		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_MON_START			CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_MON_STOP			CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_RESUME_PROC		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 static DWORD Job(LPVOID Context) {
     std::cout << "Hello from thread!" << std::endl;
@@ -14,6 +17,12 @@ static DWORD Job(LPVOID Context) {
         return 1;
     }
     std::cout << "Recieved value: " << Value << std::endl;
+   
+    if (!DeviceIoControl((HANDLE)Context, IOCTL_RESUME_PROC, &Value, sizeof(ULONG_PTR), NULL, 0, &Size, NULL)) {
+        std::cerr << "IOCTL failed. Error: " << GetLastError() << std::endl;
+        CloseHandle(Context);
+        return 1;
+    }
     return 0;
 }
 
@@ -25,6 +34,12 @@ int main() {
     DeviceHandle = CreateFile(L"\\\\.\\KeChildTracer", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (DeviceHandle == INVALID_HANDLE_VALUE) {
         std::cerr << "Failed to open device. Error: " << GetLastError() << std::endl;
+        return 1;
+    }
+
+    if (!DeviceIoControl(DeviceHandle, IOCTL_MON_START, NULL, 0, NULL, 0, &BytesReturned, NULL)) {
+        std::cerr << "IOCTL failed. Error: " << GetLastError() << std::endl;
+        CloseHandle(DeviceHandle);
         return 1;
     }
 

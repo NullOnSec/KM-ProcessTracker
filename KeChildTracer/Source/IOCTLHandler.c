@@ -1,10 +1,12 @@
 #include <IOCTLHandler.h>
 #include <Vector.h>
+#include <ProcessMonitor.h>
 
-extern PIO_WORKITEM ChildNotifierWI;
+extern PIO_WORKITEM ChildNotifierWI, ProcessResumeWI;
 extern ULONG_PTR    ChildPidToNotify; // To be removed
 extern KEVENT       PrepChildInjEvt;
 extern t_vector     PPidWatchlist;
+extern KAPIS        ProcUtilsApis;
 
 NTSTATUS DriverCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     UNREFERENCED_PARAMETER(DeviceObject);
@@ -32,7 +34,6 @@ VOID ChildInjDelayedWorker(PDEVICE_OBJECT DeviceObject, PVOID Context) {
     UNREFERENCED_PARAMETER(DeviceObject);
 
     KeWaitForSingleObject(&PrepChildInjEvt, Executive, KernelMode, FALSE, NULL);
-
     if (!Irp->AssociatedIrp.SystemBuffer) {
         Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
         Irp->IoStatus.Information = 0;
@@ -52,6 +53,22 @@ VOID ChildInjDelayedWorker(PDEVICE_OBJECT DeviceObject, PVOID Context) {
     Irp->IoStatus.Information = sizeof(ULONG_PTR);
 
 CompleteRequest:
+    ChildPidToNotify = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+VOID ResumeProcessDelayedWorker(PDEVICE_OBJECT DeviceObject, PVOID Context) {
+    NTSTATUS            Status  = STATUS_SUCCESS;
+    PIRP                Irp     = (PIRP)Context;
+    //PIO_STACK_LOCATION  IrpSp   = IoGetCurrentIrpStackLocation(Irp);
+
+    Break();
+    UNREFERENCED_PARAMETER(DeviceObject);
+    if (IoGetCurrentIrpStackLocation(Irp)->Parameters.DeviceIoControl.InputBufferLength >= sizeof(int)) {
+        Status = ResumeProcessByPid(*(int*)Irp->AssociatedIrp.SystemBuffer);
+    } else Status = STATUS_BUFFER_TOO_SMALL;
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
@@ -89,8 +106,29 @@ NTSTATUS IoControlDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return STATUS_PENDING;
 
     case IOCTL_MON_START:
-        Status = STATUS_SUCCESS;
+        Break();
+        Status = RegisterCallbacks(FALSE);
         break;
+
+    case IOCTL_MON_STOP:// In this case its probably ideal to do some cleanup once the actual pipeline is more advanced
+        Status = RegisterCallbacks(TRUE);
+        break;
+
+    case IOCTL_RESUME_PROC:
+        Break();
+        if (IrpSp->Parameters.DeviceIoControl.InputBufferLength >= sizeof(int)) {
+            int* Pid = ExAllocatePoolWithTag(NonPagedPool, sizeof(int), 'IPID');
+            if (!Pid) {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
+            int* Aux = (int*)Irp->AssociatedIrp.SystemBuffer;
+            *Pid = *Aux;
+            Status = ResumeProcessByPid(*Pid);
+            ExFreePool(Pid);
+        } else Status = STATUS_BUFFER_TOO_SMALL;
+        break;
+
     default:
         Status = STATUS_INVALID_DEVICE_REQUEST;
         break;

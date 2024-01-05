@@ -18,4 +18,6 @@ typedef struct s_kernel_apis {
     pPsLookupProcessByProcessId KLookupProcessById;
 }KAPIS;
 
-void CreateProcessNotifyRoutineExCB(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo);
+void        CreateProcessNotifyRoutineExCB(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo);
+NTSTATUS    RegisterCallbacks(BOOLEAN RemoveCB);
+NTSTATUS    ResumeProcessByPid(ULONG_PTR Pid);

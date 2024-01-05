@@ -25,12 +25,47 @@ void CreateProcessNotifyRoutineExCB(PEPROCESS Process, HANDLE ProcessId, PPS_CRE
         if (PPidWatchlist.Data && PPidWatchlist.Size > 0) {
             VectorSafeIter(&PPidWatchlist, IsPidPresent, (void*)&OnWatch);
             if (OnWatch.IsWatched) {
-                Break();
                 if (!NT_SUCCESS(ProcUtilsApis.KSuspendProccess(Process))) {
-                    DebugPrint("Unable to suspend target: %d", ProcessId);
+                    DebugPrint("Unable to suspend target: %d\n", ProcessId);
                     return;
-                } else DebugPrint("Target: %d suspended succesfully", ProcessId); 
+                } else DebugPrint("Target: %d suspended succesfully\n", ProcessId);
+                Break();
+                ChildPidToNotify = HandleToULong(ProcessId);
+                KeSetEvent(&PrepChildInjEvt, 0, FALSE);
             }
         }
     }
+}
+
+NTSTATUS RegisterCallbacks(BOOLEAN RemoveCB) {
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    Status = PsSetCreateProcessNotifyRoutineEx(CreateProcessNotifyRoutineExCB, RemoveCB);
+    if (!NT_SUCCESS(Status)) {
+        DebugPrint("PsSetCreateProcessNotifyRoutineEx(): Error installing Callback: [%d]\n", Status);
+        return Status;
+    }
+
+    return Status;
+}
+
+NTSTATUS ResumeProcessByPid(ULONG_PTR Pid) {
+    PEPROCESS   Process;
+    NTSTATUS    Status;
+
+    Break();
+    Status = ProcUtilsApis.KLookupProcessById((HANDLE)Pid, &Process);
+    if (!NT_SUCCESS(Status)) {
+        DebugPrint("PsLookupProcessByProcessId(): Unable to obtain EPROCESS from PID %ld\n", Pid);
+        return Status;
+    }
+
+    Status = ProcUtilsApis.KResumeProccess(Process);
+    if (!NT_SUCCESS(Status)) {
+        DebugPrint("PsResumeProcess(): Unable to obtain resume PID %ld\n", Pid);
+        return Status;
+    }
+
+    DebugPrint("PsResumeProcess(): Process PID: %ld resumed succesfully\n", Pid);
+    return Status;
 }
