@@ -35,20 +35,13 @@ static DWORD Job(LPVOID Context) {
     std::cout << "Hello from thread!" << std::endl;
     ULONG_PTR   Value = 0;
     DWORD       Size = 0;
-    if (!DeviceIoControl((HANDLE)Context, IOCTL_SUB_CHILD_INJ, NULL, 0, &Value, sizeof(ULONG_PTR), &Size, NULL)) {
+   
+    //ResumeProcessByPid(Value);
+    if (!DeviceIoControl((HANDLE)Context, IOCTL_RESUME_PROC, &Value, sizeof(ULONG_PTR), NULL, 0, &Size, NULL)) {
         std::cerr << "IOCTL failed. Error: " << GetLastError() << std::endl;
         CloseHandle(Context);
         return 1;
     }
-    std::cout << "Recieved value: " << Value << std::endl;
-   
-    ResumeProcessByPid(Value);
-
-    //if (!DeviceIoControl((HANDLE)Context, IOCTL_RESUME_PROC, &Value, sizeof(ULONG_PTR), NULL, 0, &Size, NULL)) {
-    //    std::cerr << "IOCTL failed. Error: " << GetLastError() << std::endl;
-    //    CloseHandle(Context);
-    //    return 1;
-    //}
     return 0;
 }
 

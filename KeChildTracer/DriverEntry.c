@@ -4,6 +4,7 @@
 #include <DebugHelp.h>
 #include <ProcessMonitor.h>
 
+
 /*
     IOCTL Codes:
         - Add parent process to watchlist       - Implemented
@@ -27,9 +28,8 @@
         - Check edge cases that could cause the system to crash
 */
 
+KMUTEX                          PPIdWatchListMTX, SuspendedProcsMTX;
 PDEVICE_OBJECT                  gDeviceObject;
-KEVENT                          PrepChildInjEvt;
-PIO_WORKITEM                    ChildNotifierWI, ProcessResumeWI;
 UNICODE_STRING                  DeviceName = RTL_CONSTANT_STRING(L"\\Device\\KeChildTracer");
 UNICODE_STRING                  SymLinkName = RTL_CONSTANT_STRING(L"\\??\\KeChildTracer");
 KAPIS                           ProcUtilsApis;
@@ -42,8 +42,11 @@ VOID UnloadDriver(PDRIVER_OBJECT DriverObject) {
 
     UNREFERENCED_PARAMETER(DriverObject);
     Break();
+    
+    Status = RegisterCallbacks(TRUE);
 
-    RegisterCallbacks(FALSE);
+    KeWaitForSingleObject(&PPIdWatchListMTX, Executive, KernelMode, FALSE, NULL);
+    KeWaitForSingleObject(&SuspendedProcsMTX, Executive, KernelMode, FALSE, NULL);
 
     Status = IoDeleteSymbolicLink(&SymLinkName);
     if (!NT_SUCCESS(Status)) DebugPrint("IoDeleteSymbolicLink(): Error removing DeviceSymLink: [%d]\n", Status);
@@ -53,6 +56,8 @@ VOID UnloadDriver(PDRIVER_OBJECT DriverObject) {
     if (!NT_SUCCESS(Status))    DebugPrint("Errors unloading driver!\n");
     else                        DebugPrint("Driver unloaded succesfully\n");
 
+    KeReleaseMutex(&PPIdWatchListMTX, FALSE);
+    KeReleaseMutex(&SuspendedProcsMTX, FALSE);
 }
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
@@ -69,23 +74,12 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     Status = RegisterDeviceObject(DriverObject);
     if (!NT_SUCCESS(Status)) return Status;
 
-    ChildNotifierWI = IoAllocateWorkItem(gDeviceObject);
-    if (!ChildNotifierWI) {
-        DebugPrint("IoAllocateWorkItem(): Failed\n");
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    ProcessResumeWI = IoAllocateWorkItem(gDeviceObject);
-    if (!ProcessResumeWI) {
-        DebugPrint("IoAllocateWorkItem(): Failed\n");
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    KeInitializeEvent(&PrepChildInjEvt, NotificationEvent, FALSE);
-
     Status = ResolveApis();
 
     if (NT_SUCCESS(Status)) DebugPrint("Driver loaded: [%d]\n", Status);
+
+    KeInitializeMutex(&SuspendedProcsMTX, 0);
+    KeInitializeMutex(&PPIdWatchListMTX, 0);
 
     return Status;
 }
@@ -122,6 +116,10 @@ static NTSTATUS ResolveApis(void) {
     RtlInitUnicodeString(&RoutineName, L"PsLookupProcessByProcessId");
     ProcUtilsApis.KLookupProcessById = (pPsLookupProcessByProcessId)MmGetSystemRoutineAddress(&RoutineName);
     if (!ProcUtilsApis.KLookupProcessById) return STATUS_FATAL_APP_EXIT;
+
+    RtlInitUnicodeString(&RoutineName, L"PsLookupThreadByThreadId");
+    ProcUtilsApis.KGetThreadByThreadId = (pPsLookupThreadByThreadId)MmGetSystemRoutineAddress(&RoutineName);
+    if (!ProcUtilsApis.KGetThreadByThreadId) return STATUS_FATAL_APP_EXIT;
 
     return STATUS_SUCCESS;
 }
